@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import toast, { Toaster } from "react-hot-toast";
+import { Pokemon } from "./interfaces/pokemon.interface";
 
-// espera uma lista desse tipo de pokémon
-interface Pokemon {
+interface PokemonShiny {
   name: string;
   url: string;
+  shinyImage: string;
+  id: number;
+  types: string[];
 }
 
 interface PokemonDetails {
@@ -20,20 +23,26 @@ function App() {
   // armazenar pokémon que tem name e url - lista de pokémon
   // pokemons é uma estante vazia e setPokemons é a pessoa que pega o livro e põe na estante (atualiza o estado, função)
   const [pokemons, setPokemons] = useState<Pokemon[]>([]);
+  const [pokemonsShiny, setPokemonsShiny] = useState<PokemonShiny[]>([]);
 
   // estado novo: pokémon selecionado, pode ser null, sendo o estado inicial null
   const [selectedPokemon, setSelectedPokemon] = useState<PokemonDetails | null>(
     null
   );
 
+  const [selectedShinyPokemon, setSelectedShinyPokemon] =
+    useState<PokemonShiny | null>(null);
+
   const [meusPokemons, setMeusPokemons] = useState<Pokemon[]>([]);
 
   // bool falso, sendo essa a tipagem
-  const [loadingPokemons, setLoadingPokemons] = useState(false);
+  const [, setLoadingPokemons] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   const [quantidadePokemon, setQuantidadePokemon] = useState<number>(20);
+
+  const [isShinyList, setIsShinyList] = useState<boolean>(false);
 
   // const [numero, setNumero] = useState(0);
   // const [count, setCount] = useState<number>(() => {
@@ -46,11 +55,7 @@ function App() {
   // }, [count]);
 
   // lifecicle - hook
-  useEffect(() => {
-    // tela começa aqui
-
-    // loading começou
-    setLoadingPokemons(true);
+  const getPokemons = async () => {
     fetch(`http://localhost:3000/pokemon-list?limit=${quantidadePokemon}`)
       .then((res) => res.json())
       .then((data) => {
@@ -63,9 +68,17 @@ function App() {
 
         getPokemonMyFavoriteList();
       });
+  };
+  useEffect(() => {
+    // tela começa aqui
+    getPokemons();
+    // loading começou
+    setLoadingPokemons(true);
+
     return () => {
       // return quando a tela morre
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quantidadePokemon]); // quando dependência muda - exemplo, colocar uma ref ou botão, quando acontecer algo cai no useEffect
   console.log(pokemons);
   // o que o usuário vê
@@ -162,6 +175,31 @@ function App() {
     pokemon.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const getPokemonShiny = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/shiny-pokemon-list");
+      if (res.ok) {
+        const data = await res.json();
+        setPokemonsShiny(data);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  useEffect(() => {
+    if (isShinyList) {
+      setSelectedPokemon(null);
+      getPokemonShiny();
+    } else {
+      setSelectedShinyPokemon(null);
+      getPokemons();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShinyList]);
+
+  const verifySelected = selectedPokemon || selectedShinyPokemon;
+
   return (
     <div className="min-h-screen bg-gradient-to-b flex justify-center items-center p-4">
       <Toaster position="top-right" reverseOrder={false} />
@@ -196,26 +234,31 @@ function App() {
                 {/* Lógica pokémon */}
 
                 {/* verificou se o selectedpokemon existe, se não, não vai renderizar */}
-                {selectedPokemon ? (
+
+                {verifySelected ? (
                   <div className="text-center h-full flex items-center justify-center">
                     <div className="bg-gradient-to-b from-blue-100 to-blue-200 p-3 rounded-xl border-2 border-blue-400 shadow-md w-54">
-                      {isFavorite && (
+                      {selectedShinyPokemon === null && isFavorite && (
                         <div className=" text-yellow-500 text-lg">★</div>
                       )}
                       <h2 className="text-xl font-bold capitalize text-blue-800 truncate">
-                        {selectedPokemon?.name}
+                        {selectedShinyPokemon?.name ?? selectedPokemon?.name}
                       </h2>
                       <p className="text-sm text-blue-600 font-medium">
                         {/* colocar dois 0 na frente do número */}#
-                        {selectedPokemon.id.toString().padStart(3, "0")}
+                        {selectedShinyPokemon?.id.toString().padStart(3, "0") ??
+                          selectedPokemon?.id.toString().padStart(3, "0")}
                       </p>
                       <img
-                        src={selectedPokemon.imagem}
-                        alt={selectedPokemon.name}
+                        src={
+                          selectedShinyPokemon?.shinyImage ??
+                          selectedPokemon?.imagem
+                        }
+                        alt={verifySelected?.name}
                         className="mx-auto w-24 h-24 object-contain"
                       />
                       <div className="flex justify-center gap-1 mb-1 flex-wrap">
-                        {selectedPokemon.type.map((type) => (
+                        {selectedPokemon?.type.map((type) => (
                           <span
                             key={type}
                             className="px-2 py-0.5 text-xs font-bold text-white bg-blue-600 rounded-full"
@@ -224,21 +267,22 @@ function App() {
                           </span>
                         ))}
                       </div>
-                      {isFavorite ? (
-                        <button
-                          onClick={() => deletarPokemon()}
-                          className="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-900 transition-colors mt-1 cursor-pointer"
-                        >
-                          Remover Pokémon
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => favoritePokemon(e)}
-                          className="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs hover:bg-yellow-900 transition-colors mt-1 cursor-pointer"
-                        >
-                          Favoritar Pokémon
-                        </button>
-                      )}
+                      {selectedShinyPokemon === null &&
+                        (isFavorite ? (
+                          <button
+                            onClick={() => deletarPokemon()}
+                            className="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-900 transition-colors mt-1 cursor-pointer"
+                          >
+                            Remover Pokémon
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => favoritePokemon(e)}
+                            className="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs hover:bg-yellow-900 transition-colors mt-1 cursor-pointer"
+                          >
+                            Favoritar Pokémon
+                          </button>
+                        ))}
                     </div>
                   </div>
                 ) : (
@@ -313,36 +357,52 @@ function App() {
                 </div>
               </div>
               <div className="overflow-y-auto h-56 pr-1 scrollbar-thin scrollbar-thumb-blue-500">
-                {filteredPokemon.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {filteredPokemon.map((p, index) => {
-                      return (
-                        <div
-                          key={index}
-                          onClick={() => {
-                            getPokemonDetails(p.name);
-                          }}
-                          className="relative bg-gradient-to-r from-red-100 to-red-200 p-2 rounded-lg border-2 border-red-300 shadow-sm flex flex-col items-center hover:from-red-200 hover:to-red-300 transition-all cursor-pointer justify-between"
-                        >
-                          <h3 className="text-sm font-semibold capitalize text-red-800 truncate w-full text-center">
-                            {p.name}
-                          </h3>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-center text-gray-600 text-sm py-8">
-                    Nenhum Pokémon encontrado
-                  </p>
-                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {isShinyList
+                    ? pokemonsShiny.map((p, index) => {
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => {
+                              setSelectedShinyPokemon(p);
+                            }}
+                            className="relative bg-gradient-to-r from-yellow-100 to-yellow-200 p-2 rounded-lg border-2 border-yellow-300 shadow-sm flex flex-col items-center hover:from-yellow-200 hover:to-yellow-300 transition-all cursor-pointer justify-between"
+                          >
+                            <h3 className="text-sm font-semibold capitalize text-yellow-800 truncate w-full text-center">
+                              {p.name}
+                            </h3>
+                          </div>
+                        );
+                      })
+                    : filteredPokemon.map((p, index) => {
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => {
+                              getPokemonDetails(p.name);
+                            }}
+                            className="relative bg-gradient-to-r from-red-100 to-red-200 p-2 rounded-lg border-2 border-red-300 shadow-sm flex flex-col items-center hover:from-red-200 hover:to-red-300 transition-all cursor-pointer justify-between"
+                          >
+                            <h3 className="text-sm font-semibold capitalize text-red-800 truncate w-full text-center">
+                              {p.name}
+                            </h3>
+                          </div>
+                        );
+                      })}
+                </div>
               </div>
             </div>
           </div>
           {/* controles */}
           <div className="absolute bottom-6 left-6">
             <div className="h-16 w-16 relative">
-              <div className="absolute top-0 left-5 w-6 h-6 bg-gray-900 rounded-sm" />
+              <div
+                className="absolute top-0 left-5 w-6 h-6 bg-yellow-900 rounded-sm"
+                onClick={() => {
+                  // ele nunca vai ser ele mesmo, se tiver true, vai virar false e vice versa
+                  setIsShinyList(!isShinyList);
+                }}
+              />
               <div className="absolute top-5 left-0 w-6 h-6 bg-gray-900 rounded-sm" />
               <div className="absolute top-5 left-10 w-6 h-6 bg-gray-900 rounded-sm" />
               <div
