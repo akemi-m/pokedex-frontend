@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import toast, { Toaster } from "react-hot-toast";
 
 // espera uma lista desse tipo de pokémon
 interface Pokemon {
   name: string;
+  url: string;
+}
+
+interface PokemonDetails {
+  name: string;
+  id: number;
+  imagem: string;
+  type: string[];
   url: string;
 }
 
@@ -12,8 +21,19 @@ function App() {
   // pokemons é uma estante vazia e setPokemons é a pessoa que pega o livro e põe na estante (atualiza o estado, função)
   const [pokemons, setPokemons] = useState<Pokemon[]>([]);
 
+  // estado novo: pokémon selecionado, pode ser null, sendo o estado inicial null
+  const [selectedPokemon, setSelectedPokemon] = useState<PokemonDetails | null>(
+    null
+  );
+
+  const [meusPokemons, setMeusPokemons] = useState<Pokemon[]>([]);
+
   // bool falso, sendo essa a tipagem
   const [loadingPokemons, setLoadingPokemons] = useState(false);
+
+  const [searchTerm, setSearchTerm] = useState<string>("");
+
+  const [quantidadePokemon, setQuantidadePokemon] = useState<number>(20);
 
   // const [numero, setNumero] = useState(0);
   // const [count, setCount] = useState<number>(() => {
@@ -31,7 +51,7 @@ function App() {
 
     // loading começou
     setLoadingPokemons(true);
-    fetch("http://localhost:3000/pokemon-list?limit=20")
+    fetch(`http://localhost:3000/pokemon-list?limit=${quantidadePokemon}`)
       .then((res) => res.json())
       .then((data) => {
         // data é a listagem de pokémon - gravar em um estado da tela
@@ -40,13 +60,38 @@ function App() {
         setPokemons(data);
         // terminou de carregar já
         setLoadingPokemons(false);
+
+        getPokemonMyFavoriteList();
       });
     return () => {
       // return quando a tela morre
     };
-  }, []); // quando dependência muda - exemplo, colocar uma ref ou botão, quando acontecer algo cai no useEffect
+  }, [quantidadePokemon]); // quando dependência muda - exemplo, colocar uma ref ou botão, quando acontecer algo cai no useEffect
   console.log(pokemons);
   // o que o usuário vê
+
+  // função mais leve
+  const getPokemonDetails = async (name: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/pokemon-detail/${name}`);
+      const data: PokemonDetails = await res.json();
+      setSelectedPokemon(data);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const getPokemonMyFavoriteList = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/pokemon-save");
+      if (res.ok) {
+        const data = await res.json();
+        setMeusPokemons(data);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   const pokeballStyles = useMemo(() => {
     return [...Array(40)].map(() => ({
@@ -57,8 +102,69 @@ function App() {
     }));
   }, []);
 
+  const isFavorite = meusPokemons.some(
+    (pf) => pf.name === selectedPokemon?.name
+  );
+
+  const favoritePokemon = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch("http://localhost:3000/pokemon-save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: selectedPokemon?.name,
+          url: selectedPokemon?.url,
+        }),
+      });
+      if (res.ok) {
+        getPokemonMyFavoriteList();
+        toast.success(`${selectedPokemon?.name} favoritado com sucesso.`, {
+          style: {
+            background: "#10b981",
+            color: "#ffffff",
+            borderRadius: "8px",
+            padding: "16px",
+          },
+        });
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const deletarPokemon = async () => {
+    try {
+      const res = await fetch(
+        `http://localhost:3000/pokemon-delete/${selectedPokemon?.name}`,
+        {
+          method: "DELETE",
+        }
+      );
+      if (res.ok) {
+        getPokemonMyFavoriteList();
+        toast.error(`${selectedPokemon?.name} removido com sucesso.`, {
+          style: {
+            background: "#b91010",
+            color: "#ffffff",
+            borderRadius: "8px",
+            padding: "16px",
+          },
+        });
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  // vendo se na lista de pokémons existe o pokémon
+  const filteredPokemon = pokemons.filter((pokemon) =>
+    pokemon.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-b flex justify-center items-center p-4">
+      <Toaster position="top-right" reverseOrder={false} />
       <div className="absolute inset-0 -z-10 overflow-hidden">
         {pokeballStyles.map((style, index) => (
           <div
@@ -88,6 +194,63 @@ function App() {
               {/* Nintendo DS Pokémon display area */}
               <div className="pt-6 flex-col items-center justify-center h-68">
                 {/* Lógica pokémon */}
+
+                {/* verificou se o selectedpokemon existe, se não, não vai renderizar */}
+                {selectedPokemon ? (
+                  <div className="text-center h-full flex items-center justify-center">
+                    <div className="bg-gradient-to-b from-blue-100 to-blue-200 p-3 rounded-xl border-2 border-blue-400 shadow-md w-54">
+                      {isFavorite && (
+                        <div className=" text-yellow-500 text-lg">★</div>
+                      )}
+                      <h2 className="text-xl font-bold capitalize text-blue-800 truncate">
+                        {selectedPokemon?.name}
+                      </h2>
+                      <p className="text-sm text-blue-600 font-medium">
+                        {/* colocar dois 0 na frente do número */}#
+                        {selectedPokemon.id.toString().padStart(3, "0")}
+                      </p>
+                      <img
+                        src={selectedPokemon.imagem}
+                        alt={selectedPokemon.name}
+                        className="mx-auto w-24 h-24 object-contain"
+                      />
+                      <div className="flex justify-center gap-1 mb-1 flex-wrap">
+                        {selectedPokemon.type.map((type) => (
+                          <span
+                            key={type}
+                            className="px-2 py-0.5 text-xs font-bold text-white bg-blue-600 rounded-full"
+                          >
+                            {type}
+                          </span>
+                        ))}
+                      </div>
+                      {isFavorite ? (
+                        <button
+                          onClick={() => deletarPokemon()}
+                          className="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-900 transition-colors mt-1 cursor-pointer"
+                        >
+                          Remover Pokémon
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => favoritePokemon(e)}
+                          className="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs hover:bg-yellow-900 transition-colors mt-1 cursor-pointer"
+                        >
+                          Favoritar Pokémon
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center h-full flex flex-col items-center justify-center">
+                    <div className="w-24 h-24 bg-red-600 rounded-full mx-auto mb-2 border-4 border-white flex items-center justify-center">
+                      <div className="w-10 h-10 bg-white rounded-full" />
+                    </div>
+                    <p className="text-gray-700 font-medium">
+                      Selecione um Pokémon
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -124,19 +287,55 @@ function App() {
           <div className="bg-gray-900 rounded-xl p-1 relative overflow-hidden">
             {/* touch screen */}
             <div className="bg-gray-100 rounded-lg p-3">
-              <div className="overflow-y-auto h-56 pr-1 scrollbar-thin scrollbar-thumb-blue-500">
-                <div className="grid grid-cols-2 gap-2">
-                  {pokemons.map((p, index) => (
-                    <div
-                      key={index}
-                      className="relative bg-gradient-to-r from-red-100 to-red-200 p-2 rounded-lg border-2 border-red-300 shadow-sm flex flex-col items-center hover:from-red-200 hover:to-red-300 transition-all cursor-pointer h-20 justify-between"
-                    >
-                      <h3 className="text-sm font-semibold capitalize text-red-800 truncate w-full text-center">
-                        {p.name}
-                      </h3>
-                    </div>
-                  ))}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Pesquisar Pokémon"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full p-2 pl-8 border-2 border-blue-400 rounded-lg text-sm bg-white shadow-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-600 "
+                />
+                <div className="absolute left-2 top-2.5">
+                  <svg
+                    className="w-4 h-4 text-gray-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    ></path>
+                  </svg>
                 </div>
+              </div>
+              <div className="overflow-y-auto h-56 pr-1 scrollbar-thin scrollbar-thumb-blue-500">
+                {filteredPokemon.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {filteredPokemon.map((p, index) => {
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => {
+                            getPokemonDetails(p.name);
+                          }}
+                          className="relative bg-gradient-to-r from-red-100 to-red-200 p-2 rounded-lg border-2 border-red-300 shadow-sm flex flex-col items-center hover:from-red-200 hover:to-red-300 transition-all cursor-pointer justify-between"
+                        >
+                          <h3 className="text-sm font-semibold capitalize text-red-800 truncate w-full text-center">
+                            {p.name}
+                          </h3>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-600 text-sm py-8">
+                    Nenhum Pokémon encontrado
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -146,7 +345,10 @@ function App() {
               <div className="absolute top-0 left-5 w-6 h-6 bg-gray-900 rounded-sm" />
               <div className="absolute top-5 left-0 w-6 h-6 bg-gray-900 rounded-sm" />
               <div className="absolute top-5 left-10 w-6 h-6 bg-gray-900 rounded-sm" />
-              <div className="absolute top-10 left-5 w-6 h-6 bg-gray-900 rounded-sm" />
+              <div
+                className="absolute top-10 left-5 w-6 h-6 bg-blue-500 rounded-sm cursor-pointer"
+                onClick={() => setQuantidadePokemon(quantidadePokemon + 20)}
+              />
               <div className="absolute top-5 left-5 w-6 h-6 bg-gray-900 rounded-sm" />
             </div>
           </div>
